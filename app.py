@@ -8,7 +8,7 @@ to ensure authenticity and strategic alignment.
 
 import streamlit as st
 import pandas as pd
-from openai import OpenAI
+import google.generativeai as genai
 import json
 from io import BytesIO
 
@@ -102,13 +102,16 @@ def parse_linkedin_xlsx(uploaded_file) -> dict:
 
 def analyze_posts(anchor: str, draft: str, api_key: str) -> dict:
     """
-    Send anchor and draft to OpenAI for comparison analysis.
+    Send anchor and draft to Google Gemini for comparison analysis.
     Returns structured analysis result.
     """
-    client = OpenAI(api_key=api_key)
     
-    system_prompt = """ROLE: You are a Strategic LinkedIn Editor for a Senior Executive.
-GOAL: Validate if the [New Draft] matches the DNA of the [Anchor Post].
+    # Configure Gemini
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel('gemini-1.5-flash')
+    
+    prompt = f"""You are a Strategic LinkedIn Editor for a Senior Executive.
+Your task is to validate if the [New Draft] matches the DNA of the [Anchor Post].
 
 CONTEXT:
 The user's audience consists of senior professionals - Founders, CEOs, and executives.
@@ -125,22 +128,7 @@ ANALYSIS FRAMEWORK:
 3. Hook Geometry: Does the first sentence create similar psychological impact?
 4. Authority Level: Does it sound like the same seniority level?
 
-OUTPUT: Return ONLY valid JSON (no markdown, no explanation before/after):
-{
-    "score": <number 0-100>,
-    "verdict": "<one sentence explaining the main gap>",
-    "risk_level": "<Low/Medium/High>",
-    "analysis": {
-        "visual_physics": "<brief assessment>",
-        "tonal_dna": "<brief assessment>",
-        "hook_comparison": "<brief assessment>"
-    },
-    "fatal_errors": ["<list any fatal errors found, empty if none>"],
-    "fix_suggestions": ["<specific actionable suggestion 1>", "<suggestion 2>", "<suggestion 3>"],
-    "rewritten_hook": "<rewritten first 2-3 lines that match anchor's style>"
-}"""
-
-    user_prompt = f"""[ANCHOR POST - This performed well]:
+[ANCHOR POST - This performed well]:
 {anchor}
 
 ---
@@ -148,25 +136,34 @@ OUTPUT: Return ONLY valid JSON (no markdown, no explanation before/after):
 [NEW DRAFT - Analyze this]:
 {draft}
 
-Compare the draft to the anchor and provide your analysis as JSON."""
+Compare the draft to the anchor and provide your analysis.
+
+OUTPUT: Return ONLY valid JSON (no markdown, no explanation before/after, no ```json tags):
+{{
+    "score": <number 0-100>,
+    "verdict": "<one sentence explaining the main gap>",
+    "risk_level": "<Low/Medium/High>",
+    "analysis": {{
+        "visual_physics": "<brief assessment>",
+        "tonal_dna": "<brief assessment>",
+        "hook_comparison": "<brief assessment>"
+    }},
+    "fatal_errors": ["<list any fatal errors found, empty array if none>"],
+    "fix_suggestions": ["<specific actionable suggestion 1>", "<suggestion 2>", "<suggestion 3>"],
+    "rewritten_hook": "<rewritten first 2-3 lines that match anchor's style>"
+}}"""
 
     try:
-        response = client.chat.completions.create(
-            model="gpt-4o",
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ],
-            temperature=0.3
-        )
-        
-        result_text = response.choices[0].message.content.strip()
+        response = model.generate_content(prompt)
+        result_text = response.text.strip()
         
         # Clean up potential markdown formatting
         if result_text.startswith("```"):
             result_text = result_text.split("```")[1]
             if result_text.startswith("json"):
                 result_text = result_text[4:]
+        if result_text.endswith("```"):
+            result_text = result_text[:-3]
         result_text = result_text.strip()
         
         return json.loads(result_text)
@@ -189,9 +186,9 @@ with st.sidebar:
     st.header("⚙️ Setup")
     
     api_key = st.text_input(
-        "OpenAI API Key",
+        "Google Gemini API Key",
         type="password",
-        help="Your OpenAI API key for GPT-4o analysis"
+        help="Your Google Gemini API key for AI analysis"
     )
     
     st.divider()
@@ -271,7 +268,7 @@ with col_btn2:
     )
 
 if not api_key:
-    st.info("👈 Enter your OpenAI API key in the sidebar to enable analysis")
+    st.info("👈 Enter your Google Gemini API key in the sidebar to enable analysis")
 elif not anchor_text or not draft_text:
     st.info("✍️ Paste both an anchor post and a new draft to analyze")
 
