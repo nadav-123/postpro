@@ -108,7 +108,7 @@ def analyze_posts(anchor: str, draft: str, api_key: str) -> dict:
     
     # Configure Gemini
     genai.configure(api_key=api_key)
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-pro')
     
     prompt = f"""You are a Strategic LinkedIn Editor for a Senior Executive.
 Your task is to validate if the [New Draft] matches the DNA of the [Anchor Post].
