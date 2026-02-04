@@ -1,9 +1,7 @@
 """
-PostPro V1.5 - The Reputation Guardian
+PostPro V2.0 - The Reputation Guardian
 LinkedIn Post Analyzer & Optimizer
-
-A tool that compares your new draft against your proven history
-to ensure authenticity and strategic alignment.
+Beautiful UI with Dashboard & Statistics
 """
 
 import streamlit as st
@@ -11,51 +9,323 @@ import pandas as pd
 import google.generativeai as genai
 import json
 from io import BytesIO
+from datetime import datetime
 
 # Page config
 st.set_page_config(
     page_title="PostPro - LinkedIn Post Optimizer",
     page_icon="🛡️",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
-# Custom CSS for better UI
+# Modern CSS with gradients and animations
 st.markdown("""
 <style>
+    /* Import Google Font */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    
+    * {
+        font-family: 'Inter', sans-serif;
+    }
+    
+    /* Main background */
+    .stApp {
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    }
+    
+    /* Header styling */
     .main-header {
-        font-size: 2.5rem;
-        font-weight: bold;
-        color: #0077B5;
+        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-size: 3rem;
+        font-weight: 700;
+        text-align: center;
         margin-bottom: 0;
     }
+    
     .sub-header {
-        font-size: 1.2rem;
-        color: #666;
-        margin-top: 0;
+        color: #a0aec0;
+        font-size: 1.1rem;
+        text-align: center;
+        margin-top: 5px;
+        margin-bottom: 30px;
     }
-    .score-high { color: #28a745; font-size: 3rem; font-weight: bold; }
-    .score-medium { color: #ffc107; font-size: 3rem; font-weight: bold; }
-    .score-low { color: #dc3545; font-size: 3rem; font-weight: bold; }
-    .risk-low { background-color: #d4edda; padding: 10px; border-radius: 5px; }
-    .risk-medium { background-color: #fff3cd; padding: 10px; border-radius: 5px; }
-    .risk-high { background-color: #f8d7da; padding: 10px; border-radius: 5px; }
-    .stTextArea textarea { font-size: 14px; }
+    
+    /* Card styling */
+    .metric-card {
+        background: linear-gradient(145deg, #1e2a4a 0%, #152238 100%);
+        border-radius: 16px;
+        padding: 24px;
+        border: 1px solid rgba(102, 126, 234, 0.2);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+    }
+    
+    .metric-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 30px rgba(102, 126, 234, 0.3);
+    }
+    
+    .metric-value {
+        font-size: 2.5rem;
+        font-weight: 700;
+        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+    
+    .metric-label {
+        color: #a0aec0;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-top: 8px;
+    }
+    
+    /* Score display */
+    .score-container {
+        background: linear-gradient(145deg, #1e2a4a 0%, #152238 100%);
+        border-radius: 20px;
+        padding: 30px;
+        text-align: center;
+        border: 2px solid;
+        animation: pulse 2s infinite;
+    }
+    
+    .score-high {
+        border-color: #48bb78;
+        box-shadow: 0 0 30px rgba(72, 187, 120, 0.3);
+    }
+    
+    .score-medium {
+        border-color: #ecc94b;
+        box-shadow: 0 0 30px rgba(236, 201, 75, 0.3);
+    }
+    
+    .score-low {
+        border-color: #fc8181;
+        box-shadow: 0 0 30px rgba(252, 129, 129, 0.3);
+    }
+    
+    .score-number {
+        font-size: 4rem;
+        font-weight: 700;
+    }
+    
+    .score-number.high { color: #48bb78; }
+    .score-number.medium { color: #ecc94b; }
+    .score-number.low { color: #fc8181; }
+    
+    /* Risk badges */
+    .risk-badge {
+        display: inline-block;
+        padding: 8px 20px;
+        border-radius: 50px;
+        font-weight: 600;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+    
+    .risk-low {
+        background: linear-gradient(90deg, #48bb78 0%, #38a169 100%);
+        color: white;
+    }
+    
+    .risk-medium {
+        background: linear-gradient(90deg, #ecc94b 0%, #d69e2e 100%);
+        color: #1a1a2e;
+    }
+    
+    .risk-high {
+        background: linear-gradient(90deg, #fc8181 0%, #e53e3e 100%);
+        color: white;
+    }
+    
+    /* Button styling */
+    .stButton > button {
+        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+        border-radius: 12px;
+        padding: 12px 30px;
+        font-weight: 600;
+        font-size: 1rem;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    }
+    
+    .stButton > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 25px rgba(102, 126, 234, 0.6);
+    }
+    
+    /* Text area styling */
+    .stTextArea textarea {
+        background: #1e2a4a;
+        border: 1px solid rgba(102, 126, 234, 0.3);
+        border-radius: 12px;
+        color: #e2e8f0;
+        font-size: 15px;
+        padding: 15px;
+    }
+    
+    .stTextArea textarea:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+    }
+    
+    /* Sidebar styling */
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #1e2a4a 0%, #152238 100%);
+    }
+    
+    [data-testid="stSidebar"] .stTextInput input {
+        background: #0f172a;
+        border: 1px solid rgba(102, 126, 234, 0.3);
+        border-radius: 8px;
+        color: #e2e8f0;
+    }
+    
+    /* Tab styling */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+        background: transparent;
+    }
+    
+    .stTabs [data-baseweb="tab"] {
+        background: #1e2a4a;
+        border-radius: 10px;
+        color: #a0aec0;
+        border: 1px solid rgba(102, 126, 234, 0.2);
+        padding: 10px 20px;
+    }
+    
+    .stTabs [aria-selected="true"] {
+        background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+    
+    /* Expander styling */
+    .streamlit-expanderHeader {
+        background: #1e2a4a;
+        border-radius: 10px;
+        color: #e2e8f0;
+    }
+    
+    /* Analysis results cards */
+    .analysis-card {
+        background: linear-gradient(145deg, #1e2a4a 0%, #152238 100%);
+        border-radius: 16px;
+        padding: 20px;
+        margin: 10px 0;
+        border-left: 4px solid #667eea;
+    }
+    
+    .suggestion-item {
+        background: rgba(102, 126, 234, 0.1);
+        border-radius: 10px;
+        padding: 15px;
+        margin: 8px 0;
+        border-left: 3px solid #667eea;
+        color: #e2e8f0;
+    }
+    
+    .hook-rewrite {
+        background: linear-gradient(145deg, rgba(72, 187, 120, 0.1) 0%, rgba(56, 161, 105, 0.1) 100%);
+        border-radius: 12px;
+        padding: 20px;
+        border: 1px solid rgba(72, 187, 120, 0.3);
+        color: #48bb78;
+        font-size: 1.1rem;
+        line-height: 1.6;
+    }
+    
+    /* Footer */
+    .footer {
+        text-align: center;
+        color: #4a5568;
+        padding: 30px;
+        margin-top: 50px;
+    }
+    
+    /* Animations */
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.8; }
+    }
+    
+    @keyframes slideIn {
+        from { opacity: 0; transform: translateY(20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    
+    .animate-in {
+        animation: slideIn 0.5s ease forwards;
+    }
+    
+    /* Mobile preview */
+    .mobile-preview {
+        background: #000;
+        border-radius: 30px;
+        padding: 20px;
+        max-width: 320px;
+        margin: 0 auto;
+        border: 3px solid #333;
+    }
+    
+    .mobile-header {
+        background: #1a1a1a;
+        padding: 10px;
+        border-radius: 10px;
+        margin-bottom: 15px;
+    }
+    
+    .mobile-content {
+        background: #fff;
+        color: #000;
+        padding: 15px;
+        border-radius: 10px;
+        font-size: 14px;
+        line-height: 1.5;
+    }
+    
+    .see-more {
+        color: #0a66c2;
+        font-weight: 600;
+    }
+    
+    /* Hide Streamlit branding */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    
+    /* Custom divider */
+    .custom-divider {
+        height: 2px;
+        background: linear-gradient(90deg, transparent, #667eea, transparent);
+        margin: 30px 0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 
+# Initialize session state
+if 'analysis_history' not in st.session_state:
+    st.session_state.analysis_history = []
+if 'total_analyses' not in st.session_state:
+    st.session_state.total_analyses = 0
+if 'avg_score' not in st.session_state:
+    st.session_state.avg_score = 0
+
+
 def parse_linkedin_xlsx(uploaded_file) -> dict:
-    """
-    Parse LinkedIn Content export XLSX file.
-    Returns dict with top_posts_by_engagement and top_posts_by_impressions.
-    """
+    """Parse LinkedIn Content export XLSX file."""
     try:
         xlsx = pd.ExcelFile(BytesIO(uploaded_file.read()))
-        
-        # Read TOP POSTS sheet
         df = pd.read_excel(xlsx, sheet_name='TOP POSTS', header=None)
         
-        # Find the header row (contains 'Post URL')
         header_row = None
         for idx, row in df.iterrows():
             if 'Post URL' in row.values:
@@ -65,23 +335,16 @@ def parse_linkedin_xlsx(uploaded_file) -> dict:
         if header_row is None:
             return {"error": "Could not find Post URL header in file"}
         
-        # The file has two tables side by side:
-        # Columns 0-2: By Engagements (URL, Date, Engagements)
-        # Columns 4-6: By Impressions (URL, Date, Impressions)
-        
-        # Extract engagement table
         engagement_df = df.iloc[header_row+1:, 0:3].copy()
         engagement_df.columns = ['url', 'date', 'engagements']
         engagement_df = engagement_df.dropna(subset=['url'])
         engagement_df = engagement_df[engagement_df['url'].str.contains('linkedin.com', na=False)]
         
-        # Extract impressions table
         impressions_df = df.iloc[header_row+1:, 4:7].copy()
         impressions_df.columns = ['url', 'date', 'impressions']
         impressions_df = impressions_df.dropna(subset=['url'])
         impressions_df = impressions_df[impressions_df['url'].str.contains('linkedin.com', na=False)]
         
-        # Also try to get demographics
         demographics = {}
         try:
             demo_df = pd.read_excel(xlsx, sheet_name='DEMOGRAPHICS')
@@ -90,10 +353,18 @@ def parse_linkedin_xlsx(uploaded_file) -> dict:
         except:
             pass
         
+        # Get engagement trends
+        try:
+            trend_df = pd.read_excel(xlsx, sheet_name='ENGAGEMENT')
+            trends = trend_df.to_dict('records')
+        except:
+            trends = []
+        
         return {
             "top_by_engagement": engagement_df.head(10).to_dict('records'),
             "top_by_impressions": impressions_df.head(10).to_dict('records'),
-            "demographics": demographics
+            "demographics": demographics,
+            "trends": trends
         }
         
     except Exception as e:
@@ -101,12 +372,8 @@ def parse_linkedin_xlsx(uploaded_file) -> dict:
 
 
 def analyze_posts(anchor: str, draft: str, api_key: str) -> dict:
-    """
-    Send anchor and draft to Google Gemini for comparison analysis.
-    Returns structured analysis result.
-    """
+    """Send anchor and draft to Google Gemini for comparison analysis."""
     
-    # Configure Gemini
     genai.configure(api_key=api_key)
     model = genai.GenerativeModel('gemini-2.5-flash')
     
@@ -157,7 +424,6 @@ OUTPUT: Return ONLY valid JSON (no markdown, no explanation before/after, no ```
         response = model.generate_content(prompt)
         result_text = response.text.strip()
         
-        # Clean up potential markdown formatting
         if result_text.startswith("```"):
             result_text = result_text.split("```")[1]
             if result_text.startswith("json"):
@@ -174,181 +440,333 @@ OUTPUT: Return ONLY valid JSON (no markdown, no explanation before/after, no ```
         return {"error": str(e)}
 
 
+def render_mobile_preview(text: str, char_limit: int = 150):
+    """Render a mobile-style preview with See More cutoff."""
+    lines = text.split('\n')
+    preview_lines = []
+    char_count = 0
+    line_count = 0
+    cut_off = False
+    
+    for line in lines:
+        if line_count >= 3 or char_count >= char_limit:
+            cut_off = True
+            break
+        preview_lines.append(line)
+        char_count += len(line)
+        line_count += 1
+    
+    preview_text = '\n'.join(preview_lines)
+    if cut_off:
+        preview_text += '...'
+    
+    return preview_text, cut_off
+
+
 # ============== MAIN APP ==============
 
-st.markdown('<p class="main-header">🛡️ PostPro</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">The Reputation Guardian - Validate your LinkedIn posts before publishing</p>', unsafe_allow_html=True)
+# Header
+st.markdown('<h1 class="main-header">🛡️ PostPro</h1>', unsafe_allow_html=True)
+st.markdown('<p class="sub-header">The Reputation Guardian - AI-Powered LinkedIn Post Optimizer</p>', unsafe_allow_html=True)
+st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
 
-st.divider()
-
-# Sidebar for API key and file upload
+# Sidebar
 with st.sidebar:
-    st.header("⚙️ Setup")
+    st.markdown("### ⚙️ Configuration")
     
     api_key = st.text_input(
-        "Google Gemini API Key",
+        "🔑 Gemini API Key",
         type="password",
-        help="Your Google Gemini API key for AI analysis"
+        help="Get your free API key from aistudio.google.com"
     )
     
-    st.divider()
+    st.markdown("---")
     
-    st.header("📊 Import Your Data")
+    st.markdown("### 📊 Import LinkedIn Data")
     uploaded_file = st.file_uploader(
-        "Upload LinkedIn Content Export (XLSX)",
+        "Upload Content Export (XLSX)",
         type=['xlsx'],
-        help="Download from LinkedIn: Settings → Get a copy of your data → Posts"
+        help="Settings → Get a copy of your data → Posts"
     )
     
     if uploaded_file:
-        with st.spinner("Parsing your LinkedIn data..."):
+        with st.spinner("📈 Analyzing your data..."):
             parsed_data = parse_linkedin_xlsx(uploaded_file)
         
-        if "error" in parsed_data:
-            st.error(f"Error parsing file: {parsed_data['error']}")
-        else:
-            st.success("✅ Data loaded successfully!")
+        if "error" not in parsed_data:
+            st.success("✅ Data loaded!")
+            st.session_state['parsed_data'] = parsed_data
             
-            # Show demographics if available
             if parsed_data.get("demographics"):
-                st.subheader("Your Audience")
+                st.markdown("#### 👥 Your Audience")
                 for demo in parsed_data["demographics"][:3]:
                     pct = float(demo['Percentage']) * 100
-                    st.write(f"• {demo['Value']}: {pct:.1f}%")
-            
-            # Store in session state
-            st.session_state['parsed_data'] = parsed_data
+                    st.markdown(f"• **{demo['Value']}**: {pct:.1f}%")
 
-# Main content area
-col1, col2 = st.columns(2)
+# Main content with tabs
+tab1, tab2, tab3 = st.tabs(["🎯 Analyzer", "📈 Dashboard", "📚 Library"])
 
-with col1:
-    st.subheader("🏆 Anchor Post (Your Proven Winner)")
+# TAB 1: Analyzer
+with tab1:
+    col1, col2 = st.columns(2)
     
-    # If we have parsed data, show selector
-    if 'parsed_data' in st.session_state and not st.session_state['parsed_data'].get('error'):
+    with col1:
+        st.markdown("### 🏆 Anchor Post")
+        st.markdown("*Your proven winner - the DNA template*")
+        
+        if 'parsed_data' in st.session_state:
+            with st.expander("📈 Your Top Posts"):
+                data = st.session_state['parsed_data']
+                for i, post in enumerate(data['top_by_engagement'][:3], 1):
+                    eng = post.get('engagements', 'N/A')
+                    st.markdown(f"**{i}.** [{eng} engagements]({post['url']})")
+        
+        anchor_text = st.text_area(
+            "Paste your best post",
+            height=200,
+            placeholder="Paste a LinkedIn post that performed well...",
+            key="anchor"
+        )
+    
+    with col2:
+        st.markdown("### 📝 New Draft")
+        st.markdown("*Your post to analyze*")
+        
+        draft_text = st.text_area(
+            "Paste your draft",
+            height=200,
+            placeholder="Paste the new post you want to publish...",
+            key="draft"
+        )
+        
+        # Mobile preview
+        if draft_text:
+            st.markdown("#### 📱 Mobile Preview")
+            preview, is_cut = render_mobile_preview(draft_text)
+            preview_html = f"""
+            <div style="background: #fff; color: #000; padding: 15px; border-radius: 10px; 
+                        font-size: 14px; line-height: 1.5; max-width: 300px; border: 2px solid #e2e8f0;">
+                {preview.replace(chr(10), '<br>')}
+                {'<span style="color: #0a66c2; font-weight: 600;">...see more</span>' if is_cut else ''}
+            </div>
+            """
+            st.markdown(preview_html, unsafe_allow_html=True)
+            if is_cut:
+                st.warning("⚠️ Hook cuts off before main message!")
+
+    st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
+    
+    # Analyze button
+    col_btn1, col_btn2, col_btn3 = st.columns([1, 2, 1])
+    with col_btn2:
+        analyze_btn = st.button(
+            "🚀 Run DNA Analysis",
+            use_container_width=True,
+            disabled=not (api_key and anchor_text and draft_text)
+        )
+    
+    if not api_key:
+        st.info("👈 Enter your Gemini API key in the sidebar")
+    
+    # Results
+    if analyze_btn and api_key and anchor_text and draft_text:
+        with st.spinner("🧠 Analyzing your DNA..."):
+            result = analyze_posts(anchor_text, draft_text, api_key)
+        
+        if "error" in result:
+            st.error(f"❌ {result['error']}")
+        else:
+            # Update stats
+            st.session_state.total_analyses += 1
+            st.session_state.analysis_history.append({
+                'score': result.get('score', 0),
+                'timestamp': datetime.now().isoformat()
+            })
+            scores = [h['score'] for h in st.session_state.analysis_history]
+            st.session_state.avg_score = sum(scores) / len(scores)
+            
+            st.markdown('<div class="custom-divider"></div>', unsafe_allow_html=True)
+            st.markdown("## 📊 Analysis Results")
+            
+            # Score and Risk
+            res_col1, res_col2, res_col3 = st.columns(3)
+            
+            with res_col1:
+                score = result.get('score', 0)
+                score_class = 'high' if score >= 70 else 'medium' if score >= 40 else 'low'
+                st.markdown(f"""
+                <div class="score-container score-{score_class}">
+                    <div class="score-number {score_class}">{score}</div>
+                    <div style="color: #a0aec0; font-size: 1.2rem;">Humanity Score</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with res_col2:
+                risk = result.get('risk_level', 'Unknown')
+                risk_class = risk.lower()
+                st.markdown(f"""
+                <div class="metric-card" style="text-align: center; padding-top: 40px;">
+                    <div class="risk-badge risk-{risk_class}">{risk} Risk</div>
+                    <div style="color: #a0aec0; margin-top: 20px;">Reputation Risk Level</div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with res_col3:
+                st.markdown(f"""
+                <div class="metric-card">
+                    <div style="color: #667eea; font-weight: 600; margin-bottom: 10px;">📋 Verdict</div>
+                    <div style="color: #e2e8f0; font-size: 1rem; line-height: 1.6;">
+                        {result.get('verdict', 'No verdict available')}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            # Detailed analysis
+            detail_col1, detail_col2 = st.columns(2)
+            
+            with detail_col1:
+                st.markdown("### 🔬 Analysis Breakdown")
+                analysis = result.get('analysis', {})
+                
+                st.markdown(f"""
+                <div class="analysis-card">
+                    <strong style="color: #667eea;">📐 Visual Physics</strong><br>
+                    <span style="color: #e2e8f0;">{analysis.get('visual_physics', 'N/A')}</span>
+                </div>
+                <div class="analysis-card">
+                    <strong style="color: #667eea;">🎭 Tonal DNA</strong><br>
+                    <span style="color: #e2e8f0;">{analysis.get('tonal_dna', 'N/A')}</span>
+                </div>
+                <div class="analysis-card">
+                    <strong style="color: #667eea;">🎣 Hook Comparison</strong><br>
+                    <span style="color: #e2e8f0;">{analysis.get('hook_comparison', 'N/A')}</span>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                fatal_errors = result.get('fatal_errors', [])
+                if fatal_errors and fatal_errors[0]:
+                    st.markdown("### ⚠️ Fatal Errors")
+                    for error in fatal_errors:
+                        st.error(error)
+            
+            with detail_col2:
+                st.markdown("### 💡 Recommendations")
+                suggestions = result.get('fix_suggestions', [])
+                for i, suggestion in enumerate(suggestions, 1):
+                    st.markdown(f"""
+                    <div class="suggestion-item">
+                        <strong>{i}.</strong> {suggestion}
+                    </div>
+                    """, unsafe_allow_html=True)
+                
+                st.markdown("### ✨ Suggested Hook Rewrite")
+                rewritten = result.get('rewritten_hook', '')
+                if rewritten:
+                    st.markdown(f"""
+                    <div class="hook-rewrite">
+                        {rewritten}
+                    </div>
+                    """, unsafe_allow_html=True)
+
+# TAB 2: Dashboard
+with tab2:
+    st.markdown("### 📈 Performance Dashboard")
+    
+    # Metrics row
+    m1, m2, m3, m4 = st.columns(4)
+    
+    with m1:
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-value">{st.session_state.total_analyses}</div>
+            <div class="metric-label">Total Analyses</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with m2:
+        avg = round(st.session_state.avg_score, 1)
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-value">{avg}</div>
+            <div class="metric-label">Avg Score</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with m3:
+        high_scores = len([h for h in st.session_state.analysis_history if h['score'] >= 70])
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-value">{high_scores}</div>
+            <div class="metric-label">High Scores (70+)</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with m4:
+        if 'parsed_data' in st.session_state:
+            top_eng = st.session_state['parsed_data']['top_by_engagement']
+            if top_eng:
+                best = top_eng[0].get('engagements', 0)
+            else:
+                best = 0
+        else:
+            best = 0
+        st.markdown(f"""
+        <div class="metric-card">
+            <div class="metric-value">{best}</div>
+            <div class="metric-label">Best Engagement</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Score history chart
+    if st.session_state.analysis_history:
+        st.markdown("### 📊 Score History")
+        history_df = pd.DataFrame(st.session_state.analysis_history)
+        history_df['index'] = range(1, len(history_df) + 1)
+        st.line_chart(history_df.set_index('index')['score'])
+    
+    # LinkedIn trends
+    if 'parsed_data' in st.session_state and st.session_state['parsed_data'].get('trends'):
+        st.markdown("### 📈 LinkedIn Engagement Trends")
+        trends = st.session_state['parsed_data']['trends']
+        if trends:
+            trend_df = pd.DataFrame(trends)
+            if 'Date' in trend_df.columns and 'Impressions' in trend_df.columns:
+                trend_df['Date'] = pd.to_datetime(trend_df['Date'])
+                st.line_chart(trend_df.set_index('Date')['Impressions'])
+
+# TAB 3: Library
+with tab3:
+    st.markdown("### 📚 Anchor Library")
+    st.markdown("*Save your best posts as templates for future analysis*")
+    
+    st.info("🚧 Coming in V2.1: Save and manage your anchor posts in a local database!")
+    
+    if 'parsed_data' in st.session_state:
+        st.markdown("### 🏆 Your Top Performing Posts")
         data = st.session_state['parsed_data']
         
-        with st.expander("📈 Your Top Posts (click URL, copy text, paste below)"):
-            st.write("**By Engagement:**")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("#### By Engagement")
             for i, post in enumerate(data['top_by_engagement'][:5], 1):
                 eng = post.get('engagements', 'N/A')
-                st.markdown(f"{i}. [{post['url'][:50]}...]({post['url']}) - {eng} engagements")
-            
-            st.write("**By Impressions:**")
+                st.markdown(f"**{i}.** [{eng} engagements]({post['url']})")
+        
+        with col2:
+            st.markdown("#### By Impressions")
             for i, post in enumerate(data['top_by_impressions'][:5], 1):
                 imp = post.get('impressions', 'N/A')
-                st.markdown(f"{i}. [{post['url'][:50]}...]({post['url']}) - {imp:,} impressions")
-    
-    anchor_text = st.text_area(
-        "Paste your best-performing post here",
-        height=250,
-        placeholder="Paste the full text of a LinkedIn post that performed well for you...\n\nThis will be your 'DNA template' - the style and structure that resonates with your audience."
-    )
-
-with col2:
-    st.subheader("📝 New Draft (To Analyze)")
-    
-    draft_text = st.text_area(
-        "Paste your new draft here",
-        height=250,
-        placeholder="Paste the new post you want to publish...\n\nWe'll compare it to your anchor and tell you if it matches your winning formula."
-    )
-
-st.divider()
-
-# Analysis button
-col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 1])
-with col_btn2:
-    analyze_button = st.button(
-        "🔍 Run DNA Analysis",
-        type="primary",
-        use_container_width=True,
-        disabled=not (api_key and anchor_text and draft_text)
-    )
-
-if not api_key:
-    st.info("👈 Enter your Google Gemini API key in the sidebar to enable analysis")
-elif not anchor_text or not draft_text:
-    st.info("✍️ Paste both an anchor post and a new draft to analyze")
-
-# Run analysis
-if analyze_button and api_key and anchor_text and draft_text:
-    with st.spinner("🧠 Analyzing your posts..."):
-        result = analyze_posts(anchor_text, draft_text, api_key)
-    
-    if "error" in result:
-        st.error(f"Analysis failed: {result['error']}")
-        if "raw" in result:
-            with st.expander("Raw response"):
-                st.code(result['raw'])
-    else:
-        st.divider()
-        st.header("📊 Analysis Results")
-        
-        # Score and Risk display
-        res_col1, res_col2, res_col3 = st.columns(3)
-        
-        with res_col1:
-            score = result.get('score', 0)
-            score_class = 'score-high' if score >= 70 else 'score-medium' if score >= 40 else 'score-low'
-            st.markdown(f"**Humanity Score**")
-            st.markdown(f'<p class="{score_class}">{score}/100</p>', unsafe_allow_html=True)
-        
-        with res_col2:
-            risk = result.get('risk_level', 'Unknown')
-            risk_class = 'risk-low' if risk == 'Low' else 'risk-medium' if risk == 'Medium' else 'risk-high'
-            st.markdown(f"**Risk Level**")
-            st.markdown(f'<div class="{risk_class}"><strong>{risk}</strong></div>', unsafe_allow_html=True)
-        
-        with res_col3:
-            st.markdown("**Verdict**")
-            st.write(result.get('verdict', 'No verdict available'))
-        
-        st.divider()
-        
-        # Detailed analysis
-        analysis_col1, analysis_col2 = st.columns(2)
-        
-        with analysis_col1:
-            st.subheader("🔬 Detailed Analysis")
-            analysis = result.get('analysis', {})
-            
-            st.markdown("**Visual Physics:**")
-            st.write(analysis.get('visual_physics', 'N/A'))
-            
-            st.markdown("**Tonal DNA:**")
-            st.write(analysis.get('tonal_dna', 'N/A'))
-            
-            st.markdown("**Hook Comparison:**")
-            st.write(analysis.get('hook_comparison', 'N/A'))
-            
-            # Fatal errors
-            fatal_errors = result.get('fatal_errors', [])
-            if fatal_errors:
-                st.markdown("**⚠️ Fatal Errors Detected:**")
-                for error in fatal_errors:
-                    st.error(error)
-        
-        with analysis_col2:
-            st.subheader("💡 Recommendations")
-            
-            suggestions = result.get('fix_suggestions', [])
-            for i, suggestion in enumerate(suggestions, 1):
-                st.markdown(f"{i}. {suggestion}")
-            
-            st.divider()
-            
-            st.subheader("✨ Suggested Hook Rewrite")
-            rewritten = result.get('rewritten_hook', '')
-            if rewritten:
-                st.success(rewritten)
-                st.button("📋 Copy to clipboard", key="copy_hook")
+                st.markdown(f"**{i}.** [{imp:,} impressions]({post['url']})")
 
 # Footer
-st.divider()
 st.markdown("""
-<div style="text-align: center; color: #666; font-size: 0.9rem;">
-    Built by Nadav Druker | PostPro V1.5 - The Reputation Guardian
+<div class="footer">
+    <div style="color: #667eea; font-weight: 600;">PostPro V2.0</div>
+    <div style="color: #4a5568; margin-top: 5px;">Built by Nadav Druker • The Reputation Guardian</div>
 </div>
 """, unsafe_allow_html=True)
